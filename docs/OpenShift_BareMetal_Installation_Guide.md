@@ -469,9 +469,3 @@ oc describe co <operator-name>
 ---
 
 <div align="center">
-
-**Document préparé par l'équipe Infrastructure**
-
-*Pour toute question, contacter l'équipe DevOps*
-
-</div>
