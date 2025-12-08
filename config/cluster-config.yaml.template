@@ -1,0 +1,155 @@
+#===============================================================================
+# Configuration du Cluster OpenShift - Template
+#===============================================================================
+# Copiez ce fichier vers cluster-config.yaml et personnalisez les valeurs
+# cp cluster-config.yaml.template cluster-config.yaml
+#===============================================================================
+
+#-------------------------------------------------------------------------------
+# Informations du Cluster
+#-------------------------------------------------------------------------------
+cluster:
+  name: ocp
+  baseDomain: example.com
+  version: "4.17"
+  
+  # Chemins vers les fichiers de credentials
+  # Obtenez votre pull secret sur: https://cloud.redhat.com/openshift/install/pull-secret
+  pullSecretFile: /opt/openshift/pull-secret.json
+  sshKeyFile: /root/.ssh/id_rsa.pub
+
+#-------------------------------------------------------------------------------
+# Configuration Réseau
+#-------------------------------------------------------------------------------
+network:
+  # Réseau Baremetal (production)
+  baremetal:
+    subnet: 192.168.1.0/24
+    gateway: 192.168.1.1
+  
+  # Réseau Provisioning (PXE boot)
+  provisioning:
+    subnet: 172.22.0.0/24
+    enabled: true
+  
+  # Virtual IPs
+  vips:
+    api: 192.168.1.5
+    ingress: 192.168.1.6
+  
+  # Configuration DNS
+  dns:
+    useInternal: true  # true = utiliser BIND sur le bastion
+    servers:
+      - 8.8.8.8
+      - 8.8.4.4
+
+#-------------------------------------------------------------------------------
+# Configuration du Bastion
+#-------------------------------------------------------------------------------
+nodes:
+  bastion:
+    hostname: bastion.ocp.example.com
+    ip: 192.168.1.10
+    provisioningIp: 172.22.0.1
+    interfaces:
+      baremetal: ens1f0
+      provisioning: ens1f1
+
+#-------------------------------------------------------------------------------
+# Nœud Bootstrap (temporaire)
+#-------------------------------------------------------------------------------
+  bootstrap:
+    hostname: bootstrap.ocp.example.com
+    ip: 192.168.1.20
+    provisioningIp: 172.22.0.20
+    mac: "AA:BB:CC:DD:EE:00"
+    rootDevice: /dev/sda
+    bmc:
+      address: redfish://192.168.1.50/redfish/v1/Systems/1
+      username: admin
+      password: CHANGE_ME
+
+#-------------------------------------------------------------------------------
+# Nœuds Control Plane (Masters)
+#-------------------------------------------------------------------------------
+  masters:
+    - hostname: master-0.ocp.example.com
+      ip: 192.168.1.100
+      provisioningIp: 172.22.0.100
+      mac: "AA:BB:CC:DD:EE:01"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.51/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: master-1.ocp.example.com
+      ip: 192.168.1.101
+      provisioningIp: 172.22.0.101
+      mac: "AA:BB:CC:DD:EE:02"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.52/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: master-2.ocp.example.com
+      ip: 192.168.1.102
+      provisioningIp: 172.22.0.102
+      mac: "AA:BB:CC:DD:EE:03"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.53/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+#-------------------------------------------------------------------------------
+# Nœuds Worker
+#-------------------------------------------------------------------------------
+  workers:
+    - hostname: worker-0.ocp.example.com
+      ip: 192.168.1.200
+      provisioningIp: 172.22.0.200
+      mac: "AA:BB:CC:DD:EE:10"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.60/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: worker-1.ocp.example.com
+      ip: 192.168.1.201
+      provisioningIp: 172.22.0.201
+      mac: "AA:BB:CC:DD:EE:11"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.61/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: worker-2.ocp.example.com
+      ip: 192.168.1.202
+      provisioningIp: 172.22.0.202
+      mac: "AA:BB:CC:DD:EE:12"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.62/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+#-------------------------------------------------------------------------------
+# Configuration HyperShift (optionnel)
+#-------------------------------------------------------------------------------
+hypershift:
+  enabled: true
+  cliVersion: latest
+  storageClass: lvms-vg1
+  
+  # Configuration des hosted clusters à créer
+  hostedClusters: []
+  # Exemple:
+  # - name: dev-cluster
+  #   namespace: clusters
+  #   nodePoolReplicas: 3
+  #   release: quay.io/openshift-release-dev/ocp-release:4.17.0-x86_64
