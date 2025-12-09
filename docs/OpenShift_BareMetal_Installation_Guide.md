@@ -70,6 +70,11 @@ Ce document présente la procédure complète de déploiement d'**OpenShift Cont
 │  │  • HTTP     │     │                                                  │    │
 │  │  • HAProxy  │     │  ┌─────────┐ ┌─────────┐ ┌─────────┐            │    │
 │  │  • DNS      │     │  │Worker-0 │ │Worker-1 │ │Worker-2 │            │    │
+│  │             │     │  └─────────┘ └─────────┘ └─────────┘            │    │
+│  │             │     │                                                  │    │
+│  │             │     │  ┌─────────┐ ┌─────────┐ ┌─────────┐            │    │
+│  │             │     │  │ Infra-0 │ │ Infra-1 │ │ Infra-2 │            │    │
+│  │             │     │  │(tainted)│ │(tainted)│ │(tainted)│            │    │
 │  └──────┬──────┘     │  └─────────┘ └─────────┘ └─────────┘            │    │
 │         │            └─────────────────────────────────────────────────┘    │
 │         │                                                                    │
@@ -91,7 +96,8 @@ Ce document présente la procédure complète de déploiement d'**OpenShift Cont
 |-----------|------|-------------|
 | **Serveur Bastion** | Infrastructure de provisionnement | RHEL 9.x |
 | **Control Plane** | Orchestration Kubernetes | RHCOS + etcd |
-| **Workers** | Exécution des workloads | RHCOS |
+| **Workers** | Exécution des workloads applicatifs | RHCOS |
+| **Infra Nodes** | Services d'infrastructure (Router, Registry, Monitoring) | RHCOS + Taints |
 | **HyperShift** | Hosted Control Planes | OpenShift Operator |
 | **Load Balancer** | Distribution du trafic | HAProxy |
 
@@ -119,6 +125,19 @@ Ce document présente la procédure complète de déploiement d'**OpenShift Cont
 | **RAM** | 8 GB | 32 GB |
 | **Stockage** | 120 GB | 500 GB SSD |
 | **Réseau** | 10 Gbps | 2x 10 Gbps (LAG) |
+
+#### Nœuds Infrastructure (3 recommandés)
+
+Les nœuds infrastructure hébergent les composants de plateforme : Router/Ingress, Registry, Monitoring, Logging.
+
+| Ressource | Minimum | Recommandé Production |
+|-----------|---------|----------------------|
+| **CPU** | 8 vCPU | 16 vCPU |
+| **RAM** | 16 GB | 32 GB |
+| **Stockage** | 200 GB | 500 GB SSD |
+| **Réseau** | 10 Gbps | 2x 10 Gbps (LAG) |
+
+> **Note :** Les nœuds infra sont configurés avec un **taint** `node-role.kubernetes.io/infra:NoSchedule` pour empêcher les workloads applicatifs de s'y exécuter. Seuls les pods avec la toleration appropriée peuvent être schedulés.
 
 #### Serveur Bastion
 
@@ -197,6 +216,9 @@ Ce document présente la procédure complète de déploiement d'**OpenShift Cont
 | Worker-0 | worker-0.ocp.example.com | 192.168.1.200 | 172.22.0.200 | AA:BB:CC:DD:EE:10 |
 | Worker-1 | worker-1.ocp.example.com | 192.168.1.201 | 172.22.0.201 | AA:BB:CC:DD:EE:11 |
 | Worker-2 | worker-2.ocp.example.com | 192.168.1.202 | 172.22.0.202 | AA:BB:CC:DD:EE:12 |
+| **Infra-0** | infra-0.ocp.example.com | 192.168.1.150 | 172.22.0.150 | AA:BB:CC:DD:EE:20 |
+| **Infra-1** | infra-1.ocp.example.com | 192.168.1.151 | 172.22.0.151 | AA:BB:CC:DD:EE:21 |
+| **Infra-2** | infra-2.ocp.example.com | 192.168.1.152 | 172.22.0.152 | AA:BB:CC:DD:EE:22 |
 
 ### 3.3 Configuration DNS Requise
 
@@ -215,6 +237,9 @@ master-2.ocp.example.com.         IN  A   192.168.1.102
 worker-0.ocp.example.com.         IN  A   192.168.1.200
 worker-1.ocp.example.com.         IN  A   192.168.1.201
 worker-2.ocp.example.com.         IN  A   192.168.1.202
+infra-0.ocp.example.com.          IN  A   192.168.1.150
+infra-1.ocp.example.com.          IN  A   192.168.1.151
+infra-2.ocp.example.com.          IN  A   192.168.1.152
 ```
 
 #### Enregistrements PTR (Reverse)
@@ -389,7 +414,124 @@ _etcd-server-ssl._tcp.ocp.example.com.  IN  SRV  0 10 2380 master-2.ocp.example.
 - [ ] Hosted clusters "Available"
 - [ ] NodePools correctement dimensionnés
 
-### 6.2 Tests de Validation
+### 6.3 Configuration des Nœuds Infrastructure
+
+Après l'installation du cluster, les nœuds infrastructure doivent être configurés avec les labels et taints appropriés pour héberger les composants de plateforme.
+
+#### Label et Taint Appliqués
+
+```yaml
+# Label
+node-role.kubernetes.io/infra: ""
+
+# Taint (empêche les workloads applicatifs)
+node-role.kubernetes.io/infra:NoSchedule
+```
+
+#### Procédure de Configuration
+
+```bash
+# 1. Labeler les nœuds infra
+oc label node infra-0 node-role.kubernetes.io/infra=
+oc label node infra-1 node-role.kubernetes.io/infra=
+oc label node infra-2 node-role.kubernetes.io/infra=
+
+# 2. Appliquer le taint
+oc adm taint nodes infra-0 node-role.kubernetes.io/infra:NoSchedule
+oc adm taint nodes infra-1 node-role.kubernetes.io/infra:NoSchedule
+oc adm taint nodes infra-2 node-role.kubernetes.io/infra:NoSchedule
+
+# 3. Vérifier la configuration
+oc get nodes -l node-role.kubernetes.io/infra
+```
+
+#### Migration des Composants vers les Infra Nodes
+
+**Router/Ingress Controller :**
+```bash
+oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge -p '{
+  "spec": {
+    "nodePlacement": {
+      "nodeSelector": {
+        "matchLabels": {
+          "node-role.kubernetes.io/infra": ""
+        }
+      },
+      "tolerations": [{
+        "key": "node-role.kubernetes.io/infra",
+        "operator": "Exists",
+        "effect": "NoSchedule"
+      }]
+    },
+    "replicas": 3
+  }
+}'
+```
+
+**Registry :**
+```bash
+oc patch configs.imageregistry.operator.openshift.io/cluster --type=merge -p '{
+  "spec": {
+    "nodeSelector": {
+      "node-role.kubernetes.io/infra": ""
+    },
+    "tolerations": [{
+      "key": "node-role.kubernetes.io/infra",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+    }]
+  }
+}'
+```
+
+**Monitoring (Prometheus, Alertmanager, Grafana) :**
+```bash
+cat << EOF | oc apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    alertmanagerMain:
+      nodeSelector:
+        node-role.kubernetes.io/infra: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/infra"
+        operator: "Exists"
+        effect: "NoSchedule"
+    prometheusK8s:
+      nodeSelector:
+        node-role.kubernetes.io/infra: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/infra"
+        operator: "Exists"
+        effect: "NoSchedule"
+    grafana:
+      nodeSelector:
+        node-role.kubernetes.io/infra: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/infra"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+```
+
+#### Script Automatisé
+
+Un script est fourni pour automatiser cette configuration :
+
+```bash
+./scripts/configure-infra-nodes.sh
+
+# Options disponibles :
+# --dry-run         Mode simulation
+# --skip-migration  Seulement labels et taints
+# --verbose         Mode verbeux
+```
+
+### 6.4 Tests de Validation
 
 ```bash
 # Vérification des nœuds

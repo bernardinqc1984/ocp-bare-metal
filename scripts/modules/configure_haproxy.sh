@@ -117,6 +117,7 @@ EOF
 
 #---------------------------------------------------------------------
 # HTTP Ingress (80)
+# Note: Utilise les Infra Nodes si disponibles, sinon les Workers
 #---------------------------------------------------------------------
 frontend http_frontend
     bind *:80
@@ -129,19 +130,30 @@ backend http_backend
     balance roundrobin
 EOF
 
-    # Ajout des workers
-    local worker_count=$(yq e '.nodes.workers | length' "$CONFIG_FILE")
-    for ((i=0; i<worker_count; i++)); do
-        local worker_name=$(yq e ".nodes.workers[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
-        local worker_ip=$(yq e ".nodes.workers[$i].ip" "$CONFIG_FILE")
-        echo "    server ${worker_name} ${worker_ip}:80 check" >> /etc/haproxy/haproxy.cfg
-    done
+    # Ajout des infra nodes pour l'ingress (priorité aux infra nodes)
+    local infra_count=$(yq e '.nodes.infras | length' "$CONFIG_FILE" 2>/dev/null || echo "0")
+    if [[ "$infra_count" -gt 0 && "$infra_count" != "null" ]]; then
+        for ((i=0; i<infra_count; i++)); do
+            local infra_name=$(yq e ".nodes.infras[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local infra_ip=$(yq e ".nodes.infras[$i].ip" "$CONFIG_FILE")
+            echo "    server ${infra_name} ${infra_ip}:80 check" >> /etc/haproxy/haproxy.cfg
+        done
+    else
+        # Fallback sur les workers si pas d'infra nodes
+        local worker_count=$(yq e '.nodes.workers | length' "$CONFIG_FILE")
+        for ((i=0; i<worker_count; i++)); do
+            local worker_name=$(yq e ".nodes.workers[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local worker_ip=$(yq e ".nodes.workers[$i].ip" "$CONFIG_FILE")
+            echo "    server ${worker_name} ${worker_ip}:80 check" >> /etc/haproxy/haproxy.cfg
+        done
+    fi
     
     # HTTPS Ingress
     cat >> /etc/haproxy/haproxy.cfg << 'EOF'
 
 #---------------------------------------------------------------------
 # HTTPS Ingress (443)
+# Note: Utilise les Infra Nodes si disponibles, sinon les Workers
 #---------------------------------------------------------------------
 frontend https_frontend
     bind *:443
@@ -155,11 +167,21 @@ backend https_backend
     option ssl-hello-chk
 EOF
 
-    for ((i=0; i<worker_count; i++)); do
-        local worker_name=$(yq e ".nodes.workers[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
-        local worker_ip=$(yq e ".nodes.workers[$i].ip" "$CONFIG_FILE")
-        echo "    server ${worker_name} ${worker_ip}:443 check" >> /etc/haproxy/haproxy.cfg
-    done
+    # Ajout des infra nodes pour HTTPS
+    if [[ "$infra_count" -gt 0 && "$infra_count" != "null" ]]; then
+        for ((i=0; i<infra_count; i++)); do
+            local infra_name=$(yq e ".nodes.infras[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local infra_ip=$(yq e ".nodes.infras[$i].ip" "$CONFIG_FILE")
+            echo "    server ${infra_name} ${infra_ip}:443 check" >> /etc/haproxy/haproxy.cfg
+        done
+    else
+        local worker_count=$(yq e '.nodes.workers | length' "$CONFIG_FILE")
+        for ((i=0; i<worker_count; i++)); do
+            local worker_name=$(yq e ".nodes.workers[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local worker_ip=$(yq e ".nodes.workers[$i].ip" "$CONFIG_FILE")
+            echo "    server ${worker_name} ${worker_ip}:443 check" >> /etc/haproxy/haproxy.cfg
+        done
+    fi
     
     # Validation et activation
     haproxy -c -f /etc/haproxy/haproxy.cfg

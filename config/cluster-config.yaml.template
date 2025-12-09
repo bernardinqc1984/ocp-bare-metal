@@ -139,6 +139,61 @@ nodes:
         password: CHANGE_ME
 
 #-------------------------------------------------------------------------------
+# Nœuds Infrastructure (avec taints pour isolation)
+# Ces nœuds hébergent: Router/Ingress, Registry, Monitoring, Logging
+#-------------------------------------------------------------------------------
+  infras:
+    - hostname: infra-0.ocp.example.com
+      ip: 192.168.1.150
+      provisioningIp: 172.22.0.150
+      mac: "AA:BB:CC:DD:EE:20"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.70/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: infra-1.ocp.example.com
+      ip: 192.168.1.151
+      provisioningIp: 172.22.0.151
+      mac: "AA:BB:CC:DD:EE:21"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.71/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+    - hostname: infra-2.ocp.example.com
+      ip: 192.168.1.152
+      provisioningIp: 172.22.0.152
+      mac: "AA:BB:CC:DD:EE:22"
+      rootDevice: /dev/sda
+      bmc:
+        address: redfish://192.168.1.72/redfish/v1/Systems/1
+        username: admin
+        password: CHANGE_ME
+
+#-------------------------------------------------------------------------------
+# Configuration des Infra Nodes (Labels et Taints)
+#-------------------------------------------------------------------------------
+infraConfig:
+  # Label appliqué aux nœuds infra
+  label: "node-role.kubernetes.io/infra"
+  
+  # Taint pour empêcher les workloads applicatifs
+  taint:
+    key: "node-role.kubernetes.io/infra"
+    value: ""
+    effect: "NoSchedule"
+  
+  # Composants à migrer vers les infra nodes
+  components:
+    - router        # OpenShift Router/Ingress
+    - registry      # Internal Registry
+    - monitoring    # Prometheus, Alertmanager, Grafana
+    - logging       # Elasticsearch, Fluentd, Kibana (si installé)
+
+#-------------------------------------------------------------------------------
 # Configuration HyperShift (optionnel)
 #-------------------------------------------------------------------------------
 hypershift:

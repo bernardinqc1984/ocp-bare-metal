@@ -118,6 +118,16 @@ EOF
         echo "${worker_name}               IN  A   ${worker_ip}" >> "/var/named/${full_domain}.zone"
     done
     
+    # Ajout des infra nodes
+    local infra_count=$(yq e '.nodes.infras | length' "$CONFIG_FILE" 2>/dev/null || echo "0")
+    if [[ "$infra_count" -gt 0 && "$infra_count" != "null" ]]; then
+        for ((i=0; i<infra_count; i++)); do
+            local infra_name=$(yq e ".nodes.infras[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local infra_ip=$(yq e ".nodes.infras[$i].ip" "$CONFIG_FILE")
+            echo "${infra_name}               IN  A   ${infra_ip}" >> "/var/named/${full_domain}.zone"
+        done
+    fi
+    
     # Enregistrements SRV pour etcd
     echo "" >> "/var/named/${full_domain}.zone"
     echo "; etcd SRV records" >> "/var/named/${full_domain}.zone"
@@ -149,6 +159,22 @@ EOF
         local master_ip=$(yq e ".nodes.masters[$i].ip" "$CONFIG_FILE")
         echo "$(echo ${master_ip} | cut -d'.' -f4)  IN  PTR ${master_name}.${full_domain}." >> "/var/named/1.168.192.rev"
     done
+    
+    # Ajout des PTR pour workers
+    for ((i=0; i<worker_count; i++)); do
+        local worker_name=$(yq e ".nodes.workers[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+        local worker_ip=$(yq e ".nodes.workers[$i].ip" "$CONFIG_FILE")
+        echo "$(echo ${worker_ip} | cut -d'.' -f4)  IN  PTR ${worker_name}.${full_domain}." >> "/var/named/1.168.192.rev"
+    done
+    
+    # Ajout des PTR pour infra nodes
+    if [[ "$infra_count" -gt 0 && "$infra_count" != "null" ]]; then
+        for ((i=0; i<infra_count; i++)); do
+            local infra_name=$(yq e ".nodes.infras[$i].hostname" "$CONFIG_FILE" | cut -d'.' -f1)
+            local infra_ip=$(yq e ".nodes.infras[$i].ip" "$CONFIG_FILE")
+            echo "$(echo ${infra_ip} | cut -d'.' -f4)  IN  PTR ${infra_name}.${full_domain}." >> "/var/named/1.168.192.rev"
+        done
+    fi
     
     # Permissions
     chown root:named /var/named/*.zone /var/named/*.rev

@@ -120,6 +120,7 @@ OPTIONS:
                             ignition  - Génération des fichiers ignition
                             deploy    - Déploiement du cluster
                             validate  - Validation post-installation
+                            infra     - Configuration des nœuds infra
                             hypershift- Installation HyperShift
                             all       - Toutes les phases (défaut)
     
@@ -469,12 +470,18 @@ phase_deploy() {
     log INFO "  5. Démarrer les nœuds WORKER en boot PXE"
     log INFO "     Sélectionner: 'Install OpenShift Worker Node'"
     log INFO ""
-    log INFO "  6. Approuver les certificats des workers:"
+    log INFO "  6. Démarrer les nœuds INFRA en boot PXE"
+    log INFO "     Sélectionner: 'Install OpenShift Infra Node'"
+    log INFO ""
+    log INFO "  7. Approuver les certificats des workers et infras:"
     log INFO "     export KUBECONFIG=${WORK_DIR}/install/auth/kubeconfig"
     log INFO "     oc get csr -o name | xargs oc adm certificate approve"
     log INFO ""
-    log INFO "  7. Attendre la fin de l'installation:"
+    log INFO "  8. Attendre la fin de l'installation:"
     log INFO "     openshift-install --dir=${WORK_DIR}/install wait-for install-complete"
+    log INFO ""
+    log INFO "  9. Configurer les nœuds infra (labels, taints, migration):"
+    log INFO "     ./scripts/configure-infra-nodes.sh"
     log INFO ""
     log INFO "═══════════════════════════════════════════════════════════════════"
     
@@ -601,6 +608,38 @@ phase_hypershift() {
 }
 
 #-------------------------------------------------------------------------------
+# PHASE 8: CONFIGURATION DES NŒUDS INFRA
+#-------------------------------------------------------------------------------
+
+phase_infra() {
+    print_phase "8" "CONFIGURATION DES NŒUDS INFRA"
+    
+    export KUBECONFIG="${WORK_DIR}/install/auth/kubeconfig"
+    
+    # Vérifier si des nœuds infra sont définis
+    local infra_count=$(yq e '.nodes.infras | length' "$CONFIG_FILE" 2>/dev/null || echo "0")
+    
+    if [[ "$infra_count" == "0" || "$infra_count" == "null" ]]; then
+        log WARN "Aucun nœud infra défini dans la configuration"
+        log INFO "Pour configurer des nœuds infra manuellement, utilisez:"
+        log INFO "  ${SCRIPT_DIR}/configure-infra-nodes.sh"
+        return
+    fi
+    
+    log INFO "Configuration de $infra_count nœud(s) infrastructure..."
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log DEBUG "[DRY-RUN] ${SCRIPT_DIR}/configure-infra-nodes.sh --config $CONFIG_FILE"
+    else
+        # Exécuter le script de configuration des infra nodes
+        chmod +x "${SCRIPT_DIR}/configure-infra-nodes.sh"
+        "${SCRIPT_DIR}/configure-infra-nodes.sh" --config "$CONFIG_FILE" --kubeconfig "$KUBECONFIG"
+    fi
+    
+    log SUCCESS "Nœuds Infrastructure configurés"
+}
+
+#-------------------------------------------------------------------------------
 # FONCTION PRINCIPALE
 #-------------------------------------------------------------------------------
 
@@ -677,6 +716,9 @@ main() {
         validate)
             phase_validate
             ;;
+        infra)
+            phase_infra
+            ;;
         hypershift)
             phase_hypershift
             ;;
@@ -687,6 +729,7 @@ main() {
             phase_ignition
             phase_deploy
             phase_validate
+            phase_infra
             phase_hypershift
             ;;
         *)

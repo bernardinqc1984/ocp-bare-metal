@@ -62,7 +62,7 @@ subnet ${prov_subnet} netmask ${prov_netmask} {
 EOF
 
     # Ajout des réservations pour chaque nœud
-    local node_types=("bootstrap" "masters" "workers")
+    local node_types=("bootstrap" "masters" "workers" "infras")
     
     for node_type in "${node_types[@]}"; do
         if [[ "$node_type" == "bootstrap" ]]; then
